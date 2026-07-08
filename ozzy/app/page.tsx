@@ -5,17 +5,20 @@ import { useState ,useEffect } from "react";
 type Property = {
   id: number;
   name: string;
-  rent: string;
-  expenses: string;
+  address: string;
+  rent: number;
+  expenses: number;
 };
  
 export default function Page() {
   const [properties, setProperties] = useState<Property[]>([]);
 const [form, setForm] = useState({
   name: "",
+  address: "",
   rent: "",
   expenses: "",
 });
+
  
 useEffect(() => {
   const savedProperties = localStorage.getItem("properties");
@@ -28,7 +31,7 @@ useEffect(() => {
 useEffect(() => {
   localStorage.setItem("properties", JSON.stringify(properties));
 }, [properties]);
- 
+
 const totalRent = properties.reduce(
   (sum, p) => sum + Number(p.rent),
   0
@@ -47,18 +50,21 @@ function handleAddProperty() {
   setProperties([
     ...properties,
     {
-      ...form,
       id: Date.now(),
+      name: form.name,
+      address: form.address,
+      rent: Number(form.rent),
+      expenses: Number(form.expenses),
     },
   ]);
  
   setForm({
     name: "",
+    address: "",
     rent: "",
     expenses: "",
   });
 }
- 
   return (
     <div style={{ padding: 30 }}>
       <h1>Property Portfolio Dashboard</h1>
@@ -81,6 +87,16 @@ function handleAddProperty() {
           setForm({ ...form, name: e.target.value })
         }
       />
+      <br />
+<br />
+
+ <input
+  placeholder="Property Address"
+  value={form.address}
+  onChange={(e) =>
+    setForm({ ...form, address: e.target.value })
+  }
+/>
  
       <br />
       <br />
@@ -119,9 +135,12 @@ function handleAddProperty() {
       ) : (
         <ul>
           {properties.map((property) => (
-            <li key={property.id}>
-              <strong>{property.name}</strong> - Rent £{property.rent},
-              Expenses £{property.expenses}
+         <li key={property.id}>
+  <strong>{property.name}</strong> - Rent £{property.rent},
+  Expenses £{property.expenses}
+  <br />
+  Address: {property.address}
+
             </li>
           ))}
         </ul>
