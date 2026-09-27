@@ -1,65 +1,421 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type Property = {
+  id: string;
+  name: string;
+  monthlyRent: number;
+  monthlyExpenses: number;
+};
+
+type FormData = {
+  name: string;
+  monthlyRent: string;
+  monthlyExpenses: string;
+};
+
+const emptyForm: FormData = {
+  name: "",
+  monthlyRent: "",
+  monthlyExpenses: "",
+};
 
 export default function Home() {
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [form, setForm] = useState<FormData>(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("portfoliohub-properties");
+    if (saved) {
+      try {
+        setProperties(JSON.parse(saved));
+      } catch {
+        setProperties([]);
+      }
+    }
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (loaded) {
+      localStorage.setItem("portfoliohub-properties", JSON.stringify(properties));
+    }
+  }, [properties, loaded]);
+
+  const totals = useMemo(() => {
+    const totalProperties = properties.length;
+    const totalMonthlyRent = properties.reduce((sum, p) => sum + p.monthlyRent, 0);
+    const totalMonthlyExpenses = properties.reduce((sum, p) => sum + p.monthlyExpenses, 0);
+    const totalMonthlyCashFlow = totalMonthlyRent - totalMonthlyExpenses;
+
+    return {
+      totalProperties,
+      totalMonthlyRent,
+      totalMonthlyExpenses,
+      totalMonthlyCashFlow,
+    };
+  }, [properties]);
+
+  function handleChange(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const { name, value } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  }
+
+  function resetForm() {
+    setForm(emptyForm);
+    setEditingId(null);
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    const name = form.name.trim();
+    const monthlyRent = Number(form.monthlyRent);
+    const monthlyExpenses = Number(form.monthlyExpenses);
+
+    if (!name) {
+      alert("Please enter a property name.");
+      return;
+    }
+
+    if (Number.isNaN(monthlyRent) || monthlyRent < 0) {
+      alert("Please enter a valid monthly rent.");
+      return;
+    }
+
+    if (Number.isNaN(monthlyExpenses) || monthlyExpenses < 0) {
+      alert("Please enter a valid monthly expenses amount.");
+      return;
+    }
+
+    if (editingId) {
+      setProperties((prev) =>
+        prev.map((property) =>
+          property.id === editingId
+            ? {
+                ...property,
+                name,
+                monthlyRent,
+                monthlyExpenses,
+              }
+            : property
+        )
+      );
+    } else {
+      const newProperty: Property = {
+        id: crypto.randomUUID(),
+        name,
+        monthlyRent,
+        monthlyExpenses,
+      };
+
+      setProperties((prev) => [...prev, newProperty]);
+    }
+
+    resetForm();
+  }
+
+  function handleEdit(property: Property) {
+    setEditingId(property.id);
+    setForm({
+      name: property.name,
+      monthlyRent: String(property.monthlyRent),
+      monthlyExpenses: String(property.monthlyExpenses),
+    });
+  }
+
+  function handleDelete(id: string) {
+    const confirmed = window.confirm("Are you sure you want to delete this property?");
+    if (!confirmed) return;
+
+    setProperties((prev) => prev.filter((property) => property.id !== id));
+
+    if (editingId === id) {
+      resetForm();
+    }
+  }
+
+  function formatCurrency(value: number) {
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: "GBP",
+      maximumFractionDigits: 0,
+    }).format(value);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <main style={styles.page}>
+      <div style={styles.container}>
+        <header style={styles.header}>
+          <div>
+            <h1 style={styles.title}>PortfolioHub</h1>
+            <p style={styles.subtitle}>Track your property portfolio performance</p>
+          </div>
+        </header>
+
+        <section style={styles.summaryGrid}>
+          <div style={styles.card}>
+            <p style={styles.cardLabel}>Total Properties</p>
+            <h2 style={styles.cardValue}>{totals.totalProperties}</h2>
+          </div>
+          <div style={styles.card}>
+            <p style={styles.cardLabel}>Monthly Rent</p>
+            <h2 style={styles.cardValue}>{formatCurrency(totals.totalMonthlyRent)}</h2>
+          </div>
+          <div style={styles.card}>
+            <p style={styles.cardLabel}>Monthly Expenses</p>
+            <h2 style={styles.cardValue}>{formatCurrency(totals.totalMonthlyExpenses)}</h2>
+          </div>
+          <div style={styles.card}>
+            <p style={styles.cardLabel}>Monthly Cash Flow</p>
+            <h2 style={styles.cardValue}>{formatCurrency(totals.totalMonthlyCashFlow)}</h2>
+          </div>
+        </section>
+
+        <section style={styles.formSection}>
+          <h2 style={styles.sectionTitle}>
+            {editingId ? "Edit Property" : "Add Property"}
+          </h2>
+
+          <form onSubmit={handleSubmit} style={styles.form}>
+            <input
+              type="text"
+              name="name"
+              placeholder="Property name"
+              value={form.name}
+              onChange={handleChange}
+              style={styles.input}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            <input
+              type="number"
+              name="monthlyRent"
+              placeholder="Monthly rent"
+              value={form.monthlyRent}
+              onChange={handleChange}
+              style={styles.input}
+            />
+            <input
+              type="number"
+              name="monthlyExpenses"
+              placeholder="Monthly expenses"
+              value={form.monthlyExpenses}
+              onChange={handleChange}
+              style={styles.input}
+            />
+
+            <div style={styles.buttonRow}>
+              <button type="submit" style={styles.primaryButton}>
+                {editingId ? "Save Changes" : "Add Property"}
+              </button>
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  style={styles.secondaryButton}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </form>
+        </section>
+
+        <section style={styles.listSection}>
+          <h2 style={styles.sectionTitle}>Properties</h2>
+
+          {properties.length === 0 ? (
+            <div style={styles.emptyState}>No properties added yet.</div>
+          ) : (
+            <div style={styles.propertyList}>
+              {properties.map((property) => {
+                const cashFlow = property.monthlyRent - property.monthlyExpenses;
+
+                return (
+                  <div key={property.id} style={styles.propertyCard}>
+                    <div>
+                      <h3 style={styles.propertyName}>{property.name}</h3>
+                      <p style={styles.propertyDetail}>
+                        Rent: {formatCurrency(property.monthlyRent)}
+                      </p>
+                      <p style={styles.propertyDetail}>
+                        Expenses: {formatCurrency(property.monthlyExpenses)}
+                      </p>
+                      <p style={styles.propertyDetail}>
+                        Cash Flow: {formatCurrency(cashFlow)}
+                      </p>
+                    </div>
+
+                    <div style={styles.buttonColumn}>
+                      <button
+                        onClick={() => handleEdit(property)}
+                        style={styles.secondaryButton}
+                      >
+                        Edit Property
+                      </button>
+                      <button
+                        onClick={() => handleDelete(property.id)}
+                        style={styles.deleteButton}
+                      >
+                        Delete Property
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
   );
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    background: "#f5f7fb",
+    padding: "32px 16px",
+    fontFamily: "Arial, sans-serif",
+  },
+  container: {
+    maxWidth: "1000px",
+    margin: "0 auto",
+  },
+  header: {
+    marginBottom: "24px",
+  },
+  title: {
+    fontSize: "36px",
+    margin: 0,
+    color: "#1f2937",
+  },
+  subtitle: {
+    marginTop: "8px",
+    color: "#6b7280",
+    fontSize: "16px",
+  },
+  summaryGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+    gap: "16px",
+    marginBottom: "24px",
+  },
+  card: {
+    background: "#ffffff",
+    borderRadius: "12px",
+    padding: "20px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+  },
+  cardLabel: {
+    margin: 0,
+    color: "#6b7280",
+    fontSize: "14px",
+  },
+  cardValue: {
+    marginTop: "8px",
+    marginBottom: 0,
+    fontSize: "28px",
+    color: "#111827",
+  },
+  formSection: {
+    background: "#ffffff",
+    borderRadius: "12px",
+    padding: "20px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+    marginBottom: "24px",
+  },
+  sectionTitle: {
+    marginTop: 0,
+    marginBottom: "16px",
+    color: "#111827",
+  },
+  form: {
+    display: "grid",
+    gap: "12px",
+  },
+  input: {
+    padding: "12px",
+    borderRadius: "8px",
+    border: "1px solid #d1d5db",
+    fontSize: "16px",
+  },
+  buttonRow: {
+    display: "flex",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+  buttonColumn: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+    minWidth: "150px",
+  },
+  primaryButton: {
+    background: "#2563eb",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: "8px",
+    padding: "12px 16px",
+    fontSize: "15px",
+    cursor: "pointer",
+  },
+  secondaryButton: {
+    background: "#e5e7eb",
+    color: "#111827",
+    border: "none",
+    borderRadius: "8px",
+    padding: "12px 16px",
+    fontSize: "15px",
+    cursor: "pointer",
+  },
+  deleteButton: {
+    background: "#dc2626",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: "8px",
+    padding: "12px 16px",
+    fontSize: "15px",
+    cursor: "pointer",
+  },
+  listSection: {
+    background: "#ffffff",
+    borderRadius: "12px",
+    padding: "20px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+  },
+  emptyState: {
+    color: "#6b7280",
+    fontSize: "16px",
+  },
+  propertyList: {
+    display: "grid",
+    gap: "16px",
+  },
+  propertyCard: {
+    border: "1px solid #e5e7eb",
+    borderRadius: "12px",
+    padding: "16px",
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "16px",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  propertyName: {
+    margin: 0,
+    fontSize: "20px",
+    color: "#111827",
+  },
+  propertyDetail: {
+    margin: "6px 0 0 0",
+    color: "#4b5563",
+  },
+};
