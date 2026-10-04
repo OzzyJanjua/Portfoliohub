@@ -1,66 +1,93 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 type Property = {
   id: string;
   name: string;
-  monthlyRent: number;
-  monthlyExpenses: number;
+  address: string | null;
+  monthly_rent: number;
+  monthly_expenses: number;
+  mortgage_payment: number;
+  notes: string | null;
+  status: string | null;
 };
 
 type FormData = {
   name: string;
+  address: string;
   monthlyRent: string;
   monthlyExpenses: string;
+  mortgagePayment: string;
+  notes: string;
+  status: string;
 };
 
 const emptyForm: FormData = {
   name: "",
+  address: "",
   monthlyRent: "",
   monthlyExpenses: "",
+  mortgagePayment: "",
+  notes: "",
+  status: "Occupied",
 };
 
 export default function Home() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const saved = localStorage.getItem("portfoliohub-properties");
-    if (saved) {
-      try {
-        setProperties(JSON.parse(saved));
-      } catch {
-        setProperties([]);
-      }
-    }
-    setLoaded(true);
+    fetchProperties();
   }, []);
 
-  useEffect(() => {
-    if (loaded) {
-      localStorage.setItem("portfoliohub-properties", JSON.stringify(properties));
+  async function fetchProperties() {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("properties")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching properties:", error.message);
+      alert("Failed to load properties from Supabase.");
+      setLoading(false);
+      return;
     }
-  }, [properties, loaded]);
+
+    setProperties(data || []);
+    setLoading(false);
+  }
 
   const totals = useMemo(() => {
     const totalProperties = properties.length;
-    const totalMonthlyRent = properties.reduce((sum, p) => sum + p.monthlyRent, 0);
-    const totalMonthlyExpenses = properties.reduce((sum, p) => sum + p.monthlyExpenses, 0);
-    const totalMonthlyCashFlow = totalMonthlyRent - totalMonthlyExpenses;
+    const totalMonthlyRent = properties.reduce((sum, p) => sum + Number(p.monthly_rent), 0);
+    const totalMonthlyExpenses = properties.reduce(
+      (sum, p) => sum + Number(p.monthly_expenses),
+      0
+    );
+    const totalMortgagePayments = properties.reduce(
+      (sum, p) => sum + Number(p.mortgage_payment || 0),
+      0
+    );
+    const totalMonthlyCashFlow =
+      totalMonthlyRent - totalMonthlyExpenses - totalMortgagePayments;
 
     return {
       totalProperties,
       totalMonthlyRent,
       totalMonthlyExpenses,
+      totalMortgagePayments,
       totalMonthlyCashFlow,
     };
   }, [properties]);
 
   function handleChange(
-    e: React.ChangeEvent<HTMLInputElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) {
     const { name, value } = e.target;
     setForm((prev) => ({
@@ -74,12 +101,16 @@ export default function Home() {
     setEditingId(null);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     const name = form.name.trim();
+    const address = form.address.trim();
     const monthlyRent = Number(form.monthlyRent);
     const monthlyExpenses = Number(form.monthlyExpenses);
+    const mortgagePayment = Number(form.mortgagePayment || 0);
+    const notes = form.notes.trim();
+    const status = form.status;
 
     if (!name) {
       alert("Please enter a property name.");
@@ -96,51 +127,76 @@ export default function Home() {
       return;
     }
 
-    if (editingId) {
-      setProperties((prev) =>
-        prev.map((property) =>
-          property.id === editingId
-            ? {
-                ...property,
-                name,
-                monthlyRent,
-                monthlyExpenses,
-              }
-            : property
-        )
-      );
-    } else {
-      const newProperty: Property = {
-        id: crypto.randomUUID(),
-        name,
-        monthlyRent,
-        monthlyExpenses,
-      };
+    if (Number.isNaN(mortgagePayment) || mortgagePayment < 0) {
+      alert("Please enter a valid monthly mortgage payment.");
+      return;
+    }
 
-      setProperties((prev) => [...prev, newProperty]);
+    const payload = {
+      name,
+      address,
+      monthly_rent: monthlyRent,
+      monthly_expenses: monthlyExpenses,
+      mortgage_payment: mortgagePayment,
+      notes,
+      status,
+    };
+
+    if (editingId) {
+      const { error } = await supabase
+        .from("properties")
+        .update(payload)
+        .eq("id", editingId);
+
+      if (error) {
+        console.error("Error updating property:", error.message);
+        alert("Failed to update property.");
+        return;
+      }
+    } else {
+      const { error } = await supabase.from("properties").insert([payload]);
+
+      if (error) {
+        console.error("Error adding property:", error.message);
+        alert("Failed to add property.");
+        return;
+      }
     }
 
     resetForm();
+    fetchProperties();
   }
 
   function handleEdit(property: Property) {
     setEditingId(property.id);
     setForm({
-      name: property.name,
-      monthlyRent: String(property.monthlyRent),
-      monthlyExpenses: String(property.monthlyExpenses),
+      name: property.name || "",
+      address: property.address || "",
+      monthlyRent: String(property.monthly_rent ?? ""),
+      monthlyExpenses: String(property.monthly_expenses ?? ""),
+      mortgagePayment: String(property.mortgage_payment ?? ""),
+      notes: property.notes || "",
+      status: property.status || "Occupied",
     });
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string) {
     const confirmed = window.confirm("Are you sure you want to delete this property?");
     if (!confirmed) return;
 
-    setProperties((prev) => prev.filter((property) => property.id !== id));
+    const { error } = await supabase.from("properties").delete().eq("id", id);
+
+    if (error) {
+      console.error("Error deleting property:", error.message);
+      alert("Failed to delete property.");
+      return;
+    }
 
     if (editingId === id) {
       resetForm();
     }
+
+    fetchProperties();
   }
 
   function formatCurrency(value: number) {
@@ -175,6 +231,10 @@ export default function Home() {
             <h2 style={styles.cardValue}>{formatCurrency(totals.totalMonthlyExpenses)}</h2>
           </div>
           <div style={styles.card}>
+            <p style={styles.cardLabel}>Mortgage Payments</p>
+            <h2 style={styles.cardValue}>{formatCurrency(totals.totalMortgagePayments)}</h2>
+          </div>
+          <div style={styles.card}>
             <p style={styles.cardLabel}>Monthly Cash Flow</p>
             <h2 style={styles.cardValue}>{formatCurrency(totals.totalMonthlyCashFlow)}</h2>
           </div>
@@ -195,6 +255,14 @@ export default function Home() {
               style={styles.input}
             />
             <input
+              type="text"
+              name="address"
+              placeholder="Property address"
+              value={form.address}
+              onChange={handleChange}
+              style={styles.input}
+            />
+            <input
               type="number"
               name="monthlyRent"
               placeholder="Monthly rent"
@@ -209,6 +277,32 @@ export default function Home() {
               value={form.monthlyExpenses}
               onChange={handleChange}
               style={styles.input}
+            />
+            <input
+              type="number"
+              name="mortgagePayment"
+              placeholder="Monthly mortgage payment"
+              value={form.mortgagePayment}
+              onChange={handleChange}
+              style={styles.input}
+            />
+            <select
+              name="status"
+              value={form.status}
+              onChange={handleChange}
+              style={styles.input}
+            >
+              <option value="Occupied">Occupied</option>
+              <option value="Vacant">Vacant</option>
+              <option value="Under Maintenance">Under Maintenance</option>
+            </select>
+            <textarea
+              name="notes"
+              placeholder="Notes"
+              value={form.notes}
+              onChange={handleChange}
+              style={styles.textarea}
+              rows={4}
             />
 
             <div style={styles.buttonRow}>
@@ -231,25 +325,42 @@ export default function Home() {
         <section style={styles.listSection}>
           <h2 style={styles.sectionTitle}>Properties</h2>
 
-          {properties.length === 0 ? (
+          {loading ? (
+            <div style={styles.emptyState}>Loading properties...</div>
+          ) : properties.length === 0 ? (
             <div style={styles.emptyState}>No properties added yet.</div>
           ) : (
             <div style={styles.propertyList}>
               {properties.map((property) => {
-                const cashFlow = property.monthlyRent - property.monthlyExpenses;
+                const cashFlow =
+                  Number(property.monthly_rent) -
+                  Number(property.monthly_expenses) -
+                  Number(property.mortgage_payment || 0);
 
                 return (
                   <div key={property.id} style={styles.propertyCard}>
-                    <div>
+                    <div style={styles.propertyInfo}>
                       <h3 style={styles.propertyName}>{property.name}</h3>
                       <p style={styles.propertyDetail}>
-                        Rent: {formatCurrency(property.monthlyRent)}
+                        Address: {property.address || "Not provided"}
                       </p>
                       <p style={styles.propertyDetail}>
-                        Expenses: {formatCurrency(property.monthlyExpenses)}
+                        Status: {property.status || "Not set"}
+                      </p>
+                      <p style={styles.propertyDetail}>
+                        Rent: {formatCurrency(Number(property.monthly_rent))}
+                      </p>
+                      <p style={styles.propertyDetail}>
+                        Expenses: {formatCurrency(Number(property.monthly_expenses))}
+                      </p>
+                      <p style={styles.propertyDetail}>
+                        Mortgage: {formatCurrency(Number(property.mortgage_payment || 0))}
                       </p>
                       <p style={styles.propertyDetail}>
                         Cash Flow: {formatCurrency(cashFlow)}
+                      </p>
+                      <p style={styles.propertyDetail}>
+                        Notes: {property.notes || "No notes"}
                       </p>
                     </div>
 
@@ -304,7 +415,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   summaryGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
     gap: "16px",
     marginBottom: "24px",
   },
@@ -346,6 +457,15 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: "8px",
     border: "1px solid #d1d5db",
     fontSize: "16px",
+    background: "#ffffff",
+  },
+  textarea: {
+    padding: "12px",
+    borderRadius: "8px",
+    border: "1px solid #d1d5db",
+    fontSize: "16px",
+    resize: "vertical",
+    fontFamily: "Arial, sans-serif",
   },
   buttonRow: {
     display: "flex",
@@ -406,8 +526,12 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     justifyContent: "space-between",
     gap: "16px",
-    alignItems: "center",
+    alignItems: "flex-start",
     flexWrap: "wrap",
+  },
+  propertyInfo: {
+    flex: 1,
+    minWidth: "260px",
   },
   propertyName: {
     margin: 0,
@@ -417,5 +541,6 @@ const styles: Record<string, React.CSSProperties> = {
   propertyDetail: {
     margin: "6px 0 0 0",
     color: "#4b5563",
+    lineHeight: 1.5,
   },
 };
