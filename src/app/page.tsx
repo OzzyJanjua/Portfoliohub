@@ -208,51 +208,51 @@ export default function Home() {
   }
 
   return (
-    <main style={styles.page}>
-      <div style={styles.container}>
-        <header style={styles.header}>
+    <main className="ph-page">
+      <div className="ph-container">
+        <header className="ph-header">
           <div>
-            <h1 style={styles.title}>PortfolioHub</h1>
-            <p style={styles.subtitle}>Track your property portfolio performance</p>
+            <h1 className="ph-title">PortfolioHub</h1>
+            <p className="ph-subtitle">Track your property portfolio performance</p>
           </div>
         </header>
 
-        <section style={styles.summaryGrid}>
-          <div style={styles.card}>
-            <p style={styles.cardLabel}>Total Properties</p>
-            <h2 style={styles.cardValue}>{totals.totalProperties}</h2>
+        <section className="ph-summary-grid">
+          <div className="ph-card">
+            <p className="ph-card-label">Total Properties</p>
+            <h2 className="ph-card-value">{totals.totalProperties}</h2>
           </div>
-          <div style={styles.card}>
-            <p style={styles.cardLabel}>Monthly Rent</p>
-            <h2 style={styles.cardValue}>{formatCurrency(totals.totalMonthlyRent)}</h2>
+          <div className="ph-card">
+            <p className="ph-card-label">Monthly Rent</p>
+            <h2 className="ph-card-value">{formatCurrency(totals.totalMonthlyRent)}</h2>
           </div>
-          <div style={styles.card}>
-            <p style={styles.cardLabel}>Monthly Expenses</p>
-            <h2 style={styles.cardValue}>{formatCurrency(totals.totalMonthlyExpenses)}</h2>
+          <div className="ph-card">
+            <p className="ph-card-label">Monthly Expenses</p>
+            <h2 className="ph-card-value">{formatCurrency(totals.totalMonthlyExpenses)}</h2>
           </div>
-          <div style={styles.card}>
-            <p style={styles.cardLabel}>Mortgage Payments</p>
-            <h2 style={styles.cardValue}>{formatCurrency(totals.totalMortgagePayments)}</h2>
+          <div className="ph-card">
+            <p className="ph-card-label">Mortgage Payments</p>
+            <h2 className="ph-card-value">{formatCurrency(totals.totalMortgagePayments)}</h2>
           </div>
-          <div style={styles.card}>
-            <p style={styles.cardLabel}>Monthly Cash Flow</p>
-            <h2 style={styles.cardValue}>{formatCurrency(totals.totalMonthlyCashFlow)}</h2>
+          <div className="ph-card">
+            <p className="ph-card-label">Monthly Cash Flow</p>
+            <h2 className="ph-card-value">{formatCurrency(totals.totalMonthlyCashFlow)}</h2>
           </div>
         </section>
 
-        <section style={styles.formSection}>
-          <h2 style={styles.sectionTitle}>
+        <section className="ph-section">
+          <h2 className="ph-section-title">
             {editingId ? "Edit Property" : "Add Property"}
           </h2>
 
-          <form onSubmit={handleSubmit} style={styles.form}>
+          <form onSubmit={handleSubmit} className="ph-form">
             <input
               type="text"
               name="name"
               placeholder="Property name"
               value={form.name}
               onChange={handleChange}
-              style={styles.input}
+              className="ph-input"
             />
             <input
               type="text"
@@ -260,7 +260,7 @@ export default function Home() {
               placeholder="Property address"
               value={form.address}
               onChange={handleChange}
-              style={styles.input}
+              className="ph-input"
             />
             <input
               type="number"
@@ -268,7 +268,7 @@ export default function Home() {
               placeholder="Monthly rent"
               value={form.monthlyRent}
               onChange={handleChange}
-              style={styles.input}
+              className="ph-input"
             />
             <input
               type="number"
@@ -276,7 +276,7 @@ export default function Home() {
               placeholder="Monthly expenses"
               value={form.monthlyExpenses}
               onChange={handleChange}
-              style={styles.input}
+              className="ph-input"
             />
             <input
               type="number"
@@ -284,13 +284,13 @@ export default function Home() {
               placeholder="Monthly mortgage payment"
               value={form.mortgagePayment}
               onChange={handleChange}
-              style={styles.input}
+              className="ph-input"
             />
             <select
               name="status"
               value={form.status}
               onChange={handleChange}
-              style={styles.input}
+              className="ph-input"
             >
               <option value="Occupied">Occupied</option>
               <option value="Vacant">Vacant</option>
@@ -301,19 +301,19 @@ export default function Home() {
               placeholder="Notes"
               value={form.notes}
               onChange={handleChange}
-              style={styles.textarea}
+              className="ph-textarea"
               rows={4}
             />
 
-            <div style={styles.buttonRow}>
-              <button type="submit" style={styles.primaryButton}>
+            <div className="ph-button-row">
+              <button type="submit" className="ph-btn ph-btn-primary">
                 {editingId ? "Save Changes" : "Add Property"}
               </button>
               {editingId && (
                 <button
                   type="button"
                   onClick={resetForm}
-                  style={styles.secondaryButton}
+                  className="ph-btn ph-btn-secondary"
                 >
                   Cancel
                 </button>
@@ -322,15 +322,15 @@ export default function Home() {
           </form>
         </section>
 
-        <section style={styles.listSection}>
-          <h2 style={styles.sectionTitle}>Properties</h2>
+        <section className="ph-section">
+          <h2 className="ph-section-title">Properties</h2>
 
           {loading ? (
-            <div style={styles.emptyState}>Loading properties...</div>
+            <div className="ph-empty-state">Loading properties...</div>
           ) : properties.length === 0 ? (
-            <div style={styles.emptyState}>No properties added yet.</div>
+            <div className="ph-empty-state">No properties added yet.</div>
           ) : (
-            <div style={styles.propertyList}>
+            <div className="ph-property-list">
               {properties.map((property) => {
                 const cashFlow =
                   Number(property.monthly_rent) -
@@ -338,44 +338,50 @@ export default function Home() {
                   Number(property.mortgage_payment || 0);
 
                 return (
-                  <div key={property.id} style={styles.propertyCard}>
-                    <div style={styles.propertyInfo}>
-                      <h3 style={styles.propertyName}>{property.name}</h3>
-                      <p style={styles.propertyDetail}>
-                        Address: {property.address || "Not provided"}
+                  <div key={property.id} className="ph-property-card">
+                    <div className="ph-property-info">
+                      <div className="ph-property-top">
+                        <h3 className="ph-property-name">{property.name}</h3>
+                        <span className="ph-status-badge">
+                          {property.status || "Not set"}
+                        </span>
+                      </div>
+
+                      <p className="ph-property-detail">
+                        <strong>Address:</strong> {property.address || "Not provided"}
                       </p>
-                      <p style={styles.propertyDetail}>
-                        Status: {property.status || "Not set"}
+                      <p className="ph-property-detail">
+                        <strong>Rent:</strong>{" "}
+                        {formatCurrency(Number(property.monthly_rent))}
                       </p>
-                      <p style={styles.propertyDetail}>
-                        Rent: {formatCurrency(Number(property.monthly_rent))}
+                      <p className="ph-property-detail">
+                        <strong>Expenses:</strong>{" "}
+                        {formatCurrency(Number(property.monthly_expenses))}
                       </p>
-                      <p style={styles.propertyDetail}>
-                        Expenses: {formatCurrency(Number(property.monthly_expenses))}
+                      <p className="ph-property-detail">
+                        <strong>Mortgage:</strong>{" "}
+                        {formatCurrency(Number(property.mortgage_payment || 0))}
                       </p>
-                      <p style={styles.propertyDetail}>
-                        Mortgage: {formatCurrency(Number(property.mortgage_payment || 0))}
+                      <p className="ph-property-detail ph-cashflow">
+                        <strong>Cash Flow:</strong> {formatCurrency(cashFlow)}
                       </p>
-                      <p style={styles.propertyDetail}>
-                        Cash Flow: {formatCurrency(cashFlow)}
-                      </p>
-                      <p style={styles.propertyDetail}>
-                        Notes: {property.notes || "No notes"}
+                      <p className="ph-property-detail">
+                        <strong>Notes:</strong> {property.notes || "No notes"}
                       </p>
                     </div>
 
-                    <div style={styles.buttonColumn}>
+                    <div className="ph-card-actions">
                       <button
                         onClick={() => handleEdit(property)}
-                        style={styles.secondaryButton}
+                        className="ph-btn ph-btn-secondary"
                       >
-                        Edit Property
+                        Edit
                       </button>
                       <button
                         onClick={() => handleDelete(property.id)}
-                        style={styles.deleteButton}
+                        className="ph-btn ph-btn-danger"
                       >
-                        Delete Property
+                        Delete
                       </button>
                     </div>
                   </div>
@@ -388,159 +394,3 @@ export default function Home() {
     </main>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#f5f7fb",
-    padding: "32px 16px",
-    fontFamily: "Arial, sans-serif",
-  },
-  container: {
-    maxWidth: "1000px",
-    margin: "0 auto",
-  },
-  header: {
-    marginBottom: "24px",
-  },
-  title: {
-    fontSize: "36px",
-    margin: 0,
-    color: "#1f2937",
-  },
-  subtitle: {
-    marginTop: "8px",
-    color: "#6b7280",
-    fontSize: "16px",
-  },
-  summaryGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-    gap: "16px",
-    marginBottom: "24px",
-  },
-  card: {
-    background: "#ffffff",
-    borderRadius: "12px",
-    padding: "20px",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-  },
-  cardLabel: {
-    margin: 0,
-    color: "#6b7280",
-    fontSize: "14px",
-  },
-  cardValue: {
-    marginTop: "8px",
-    marginBottom: 0,
-    fontSize: "28px",
-    color: "#111827",
-  },
-  formSection: {
-    background: "#ffffff",
-    borderRadius: "12px",
-    padding: "20px",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-    marginBottom: "24px",
-  },
-  sectionTitle: {
-    marginTop: 0,
-    marginBottom: "16px",
-    color: "#111827",
-  },
-  form: {
-    display: "grid",
-    gap: "12px",
-  },
-  input: {
-    padding: "12px",
-    borderRadius: "8px",
-    border: "1px solid #d1d5db",
-    fontSize: "16px",
-    background: "#ffffff",
-  },
-  textarea: {
-    padding: "12px",
-    borderRadius: "8px",
-    border: "1px solid #d1d5db",
-    fontSize: "16px",
-    resize: "vertical",
-    fontFamily: "Arial, sans-serif",
-  },
-  buttonRow: {
-    display: "flex",
-    gap: "12px",
-    flexWrap: "wrap",
-  },
-  buttonColumn: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-    minWidth: "150px",
-  },
-  primaryButton: {
-    background: "#2563eb",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: "8px",
-    padding: "12px 16px",
-    fontSize: "15px",
-    cursor: "pointer",
-  },
-  secondaryButton: {
-    background: "#e5e7eb",
-    color: "#111827",
-    border: "none",
-    borderRadius: "8px",
-    padding: "12px 16px",
-    fontSize: "15px",
-    cursor: "pointer",
-  },
-  deleteButton: {
-    background: "#dc2626",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: "8px",
-    padding: "12px 16px",
-    fontSize: "15px",
-    cursor: "pointer",
-  },
-  listSection: {
-    background: "#ffffff",
-    borderRadius: "12px",
-    padding: "20px",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-  },
-  emptyState: {
-    color: "#6b7280",
-    fontSize: "16px",
-  },
-  propertyList: {
-    display: "grid",
-    gap: "16px",
-  },
-  propertyCard: {
-    border: "1px solid #e5e7eb",
-    borderRadius: "12px",
-    padding: "16px",
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "16px",
-    alignItems: "flex-start",
-    flexWrap: "wrap",
-  },
-  propertyInfo: {
-    flex: 1,
-    minWidth: "260px",
-  },
-  propertyName: {
-    margin: 0,
-    fontSize: "20px",
-    color: "#111827",
-  },
-  propertyDetail: {
-    margin: "6px 0 0 0",
-    color: "#4b5563",
-    lineHeight: 1.5,
-  },
-};
