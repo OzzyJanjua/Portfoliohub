@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 
 type Property = {
   id: string;
+  user_id: string | null;
   name: string;
   address: string | null;
   monthly_rent: number;
@@ -35,21 +37,55 @@ const emptyForm: FormData = {
 };
 
 export default function Home() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
   const [properties, setProperties] = useState<Property[]>([]);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchProperties();
+    getInitialSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  async function fetchProperties() {
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetchProperties(session.user.id);
+    } else {
+      setProperties([]);
+      setLoading(false);
+    }
+  }, [session]);
+
+  async function getInitialSession() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    setSession(session);
+    setAuthLoading(false);
+  }
+
+  async function fetchProperties(userId: string) {
     setLoading(true);
 
     const { data, error } = await supabase
       .from("properties")
       .select("*")
+      .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -101,8 +137,73 @@ export default function Home() {
     setEditingId(null);
   }
 
+  async function handleSignUp(e: React.FormEvent) {
+    e.preventDefault();
+
+    const cleanEmail = email.trim();
+
+    if (!cleanEmail || !password) {
+      alert("Please enter email and password.");
+      return;
+    }
+
+    const { error } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password,
+    });
+
+    if (error) {
+      console.error("Sign up error:", error.message);
+      alert(error.message);
+      return;
+    }
+
+    alert("Sign up successful. Check your email if confirmation is required.");
+  }
+
+  async function handleSignIn(e: React.FormEvent) {
+    e.preventDefault();
+
+    const cleanEmail = email.trim();
+
+    if (!cleanEmail || !password) {
+      alert("Please enter email and password.");
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password,
+    });
+
+    if (error) {
+      console.error("Sign in error:", error.message);
+      alert(error.message);
+      return;
+    }
+  }
+
+  async function handleSignOut() {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      console.error("Sign out error:", error.message);
+      alert("Failed to sign out.");
+      return;
+    }
+
+    resetForm();
+    setEmail("");
+    setPassword("");
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (!session?.user?.id) {
+      alert("You must be signed in.");
+      return;
+    }
 
     const name = form.name.trim();
     const address = form.address.trim();
@@ -133,6 +234,7 @@ export default function Home() {
     }
 
     const payload = {
+      user_id: session.user.id,
       name,
       address,
       monthly_rent: monthlyRent,
@@ -146,7 +248,8 @@ export default function Home() {
       const { error } = await supabase
         .from("properties")
         .update(payload)
-        .eq("id", editingId);
+        .eq("id", editingId)
+        .eq("user_id", session.user.id);
 
       if (error) {
         console.error("Error updating property:", error.message);
@@ -164,7 +267,7 @@ export default function Home() {
     }
 
     resetForm();
-    fetchProperties();
+    fetchProperties(session.user.id);
   }
 
   function handleEdit(property: Property) {
@@ -181,10 +284,19 @@ export default function Home() {
   }
 
   async function handleDelete(id: string) {
+    if (!session?.user?.id) {
+      alert("You must be signed in.");
+      return;
+    }
+
     const confirmed = window.confirm("Are you sure you want to delete this property?");
     if (!confirmed) return;
 
-    const { error } = await supabase.from("properties").delete().eq("id", id);
+    const { error } = await supabase
+      .from("properties")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", session.user.id);
 
     if (error) {
       console.error("Error deleting property:", error.message);
@@ -196,7 +308,7 @@ export default function Home() {
       resetForm();
     }
 
-    fetchProperties();
+    fetchProperties(session.user.id);
   }
 
   function formatCurrency(value: number) {
@@ -207,6 +319,61 @@ export default function Home() {
     }).format(value);
   }
 
+  if (authLoading) {
+    return (
+      <main className="ph-page">
+        <div className="ph-container">
+          <section className="ph-section">
+            <div className="ph-empty-state">Loading authentication...</div>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  if (!session) {
+    return (
+      <main className="ph-page">
+        <div className="ph-container ph-auth-container">
+          <section className="ph-section ph-auth-card">
+            <h1 className="ph-title">PortfolioHub</h1>
+            <p className="ph-subtitle">Sign in or create an account to manage your portfolio</p>
+
+            <form className="ph-form" onSubmit={handleSignIn}>
+              <input
+                type="email"
+                placeholder="Email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="ph-input"
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="ph-input"
+              />
+
+              <div className="ph-button-row">
+                <button type="submit" className="ph-btn ph-btn-primary">
+                  Sign In
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSignUp}
+                  className="ph-btn ph-btn-secondary"
+                >
+                  Create Account
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="ph-page">
       <div className="ph-container">
@@ -214,7 +381,12 @@ export default function Home() {
           <div>
             <h1 className="ph-title">PortfolioHub</h1>
             <p className="ph-subtitle">Track your property portfolio performance</p>
+            <p className="ph-user-email">Signed in as: {session.user.email}</p>
           </div>
+
+          <button onClick={handleSignOut} className="ph-btn ph-btn-secondary">
+            Sign Out
+          </button>
         </header>
 
         <section className="ph-summary-grid">
