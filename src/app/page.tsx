@@ -1,75 +1,567 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
 
-// Types
-type Property = { id: string; name: string; user_id: string; monthly_rent: number; monthly_expenses: number; mortgage_payment: number; status: string | null; address: string | null; notes: string | null; };
-type Doc = { id: string; property_id: string; doc_name: string; file_url: string; expiry_date: string; };
+type Property = {
+  id: string;
+  user_id: string | null;
+  name: string;
+  address: string | null;
+  monthly_rent: number;
+  monthly_expenses: number;
+  mortgage_payment: number;
+  notes: string | null;
+  status: string | null;
+};
+
+type FormData = {
+  name: string;
+  address: string;
+  monthlyRent: string;
+  monthlyExpenses: string;
+  mortgagePayment: string;
+  notes: string;
+  status: string;
+};
+
+const emptyForm: FormData = {
+  name: "",
+  address: "",
+  monthlyRent: "",
+  monthlyExpenses: "",
+  mortgagePayment: "",
+  notes: "",
+  status: "Occupied",
+};
 
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
   const [properties, setProperties] = useState<Property[]>([]);
-  const [docs, setDocs] = useState<Doc[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const [form, setForm] = useState<FormData>(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    supabase.auth.onAuthStateChange((_, session) => setSession(session));
+    getInitialSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
     if (session?.user?.id) {
-      fetchData(session.user.id);
+      fetchProperties(session.user.id);
+    } else {
+      setProperties([]);
+      setLoading(false);
     }
   }, [session]);
 
-  async function fetchData(userId: string) {
-    const { data: props } = await supabase.from("properties").select("*").eq("user_id", userId);
-    const { data: documents } = await supabase.from("property_documents").select("*").eq("user_id", userId);
-    setProperties(props || []);
-    setDocs(documents || []);
+  async function getInitialSession() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    setSession(session);
+    setAuthLoading(false);
   }
 
-  async function uploadDoc(propId: string, e: React.ChangeEvent<HTMLInputElement>, name: string, expiry: string) {
-    const file = e.target.files?.[0];
-    if (!file || !expiry) return alert("Please select a file and expiry date");
+  async function fetchProperties(userId: string) {
+    setLoading(true);
 
-    setUploading(true);
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random()}.${fileExt}`;
-    
-    const { error: uploadError } = await supabase.storage.from('property-docs').upload(fileName, file);
-    if (uploadError) { alert(uploadError.message); setUploading(false); return; }
+    const { data, error } = await supabase
+      .from("properties")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
 
-    const { data: { publicUrl } } = supabase.storage.from('property-docs').getPublicUrl(fileName);
-    await supabase.from("property_documents").insert({
-      property_id: propId, user_id: session?.user?.id, doc_name: name, file_url: publicUrl, expiry_date: expiry
+    if (error) {
+      console.error("Error fetching properties:", error.message);
+      alert("Failed to load properties from Supabase.");
+      setLoading(false);
+      return;
+    }
+
+    setProperties(data || []);
+    setLoading(false);
+  }
+
+  const totals = useMemo(() => {
+    const totalProperties = properties.length;
+    const totalMonthlyRent = properties.reduce((sum, p) => sum + Number(p.monthly_rent), 0);
+    const totalMonthlyExpenses = properties.reduce(
+      (sum, p) => sum + Number(p.monthly_expenses),
+      0
+    );
+    const totalMortgagePayments = properties.reduce(
+      (sum, p) => sum + Number(p.mortgage_payment || 0),
+      0
+    );
+    const totalMonthlyCashFlow =
+      totalMonthlyRent - totalMonthlyExpenses - totalMortgagePayments;
+
+    return {
+      totalProperties,
+      totalMonthlyRent,
+      totalMonthlyExpenses,
+      totalMortgagePayments,
+      totalMonthlyCashFlow,
+    };
+  }, [properties]);
+
+  function handleChange(
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) {
+    const { name, value } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  }
+
+  function resetForm() {
+    setForm(emptyForm);
+    setEditingId(null);
+  }
+
+  async function handleSignUp(e: React.FormEvent) {
+    e.preventDefault();
+
+    const cleanEmail = email.trim();
+
+    if (!cleanEmail || !password) {
+      alert("Please enter email and password.");
+      return;
+    }
+
+    const { error } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password,
     });
 
-    setUploading(false);
-    fetchData(session!.user.id);
+    if (error) {
+      console.error("Sign up error:", error.message);
+      alert(error.message);
+      return;
+    }
+
+    alert("Sign up successful. Check your email if confirmation is required.");
+  }
+
+  async function handleSignIn(e: React.FormEvent) {
+    e.preventDefault();
+
+    const cleanEmail = email.trim();
+
+    if (!cleanEmail || !password) {
+      alert("Please enter email and password.");
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password,
+    });
+
+    if (error) {
+      console.error("Sign in error:", error.message);
+      alert(error.message);
+      return;
+    }
+  }
+
+  async function handleSignOut() {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      console.error("Sign out error:", error.message);
+      alert("Failed to sign out.");
+      return;
+    }
+
+    resetForm();
+    setEmail("");
+    setPassword("");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!session?.user?.id) {
+      alert("You must be signed in.");
+      return;
+    }
+
+    const name = form.name.trim();
+    const address = form.address.trim();
+    const monthlyRent = Number(form.monthlyRent);
+    const monthlyExpenses = Number(form.monthlyExpenses);
+    const mortgagePayment = Number(form.mortgagePayment || 0);
+    const notes = form.notes.trim();
+    const status = form.status;
+
+    if (!name) {
+      alert("Please enter a property name.");
+      return;
+    }
+
+    if (Number.isNaN(monthlyRent) || monthlyRent < 0) {
+      alert("Please enter a valid monthly rent.");
+      return;
+    }
+
+    if (Number.isNaN(monthlyExpenses) || monthlyExpenses < 0) {
+      alert("Please enter a valid monthly expenses amount.");
+      return;
+    }
+
+    if (Number.isNaN(mortgagePayment) || mortgagePayment < 0) {
+      alert("Please enter a valid monthly mortgage payment.");
+      return;
+    }
+
+    const payload = {
+      user_id: session.user.id,
+      name,
+      address,
+      monthly_rent: monthlyRent,
+      monthly_expenses: monthlyExpenses,
+      mortgage_payment: mortgagePayment,
+      notes,
+      status,
+    };
+
+    if (editingId) {
+      const { error } = await supabase
+        .from("properties")
+        .update(payload)
+        .eq("id", editingId)
+        .eq("user_id", session.user.id);
+
+      if (error) {
+        console.error("Error updating property:", error.message);
+        alert("Failed to update property.");
+        return;
+      }
+    } else {
+      const { error } = await supabase.from("properties").insert([payload]);
+
+      if (error) {
+        console.error("Error adding property:", error.message);
+        alert("Failed to add property.");
+        return;
+      }
+    }
+
+    resetForm();
+    fetchProperties(session.user.id);
+  }
+
+  function handleEdit(property: Property) {
+    setEditingId(property.id);
+    setForm({
+      name: property.name || "",
+      address: property.address || "",
+      monthlyRent: String(property.monthly_rent ?? ""),
+      monthlyExpenses: String(property.monthly_expenses ?? ""),
+      mortgagePayment: String(property.mortgage_payment ?? ""),
+      notes: property.notes || "",
+      status: property.status || "Occupied",
+    });
+  }
+
+  async function handleDelete(id: string) {
+    if (!session?.user?.id) {
+      alert("You must be signed in.");
+      return;
+    }
+
+    const confirmed = window.confirm("Are you sure you want to delete this property?");
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from("properties")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", session.user.id);
+
+    if (error) {
+      console.error("Error deleting property:", error.message);
+      alert("Failed to delete property.");
+      return;
+    }
+
+    if (editingId === id) {
+      resetForm();
+    }
+
+    fetchProperties(session.user.id);
+  }
+
+  function formatCurrency(value: number) {
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: "GBP",
+      maximumFractionDigits: 0,
+    }).format(value);
+  }
+
+  if (authLoading) {
+    return (
+      <main className="ph-page">
+        <div className="ph-container">
+          <section className="ph-section">
+            <div className="ph-empty-state">Loading authentication...</div>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  if (!session) {
+    return (
+      <main className="ph-page">
+        <div className="ph-container ph-auth-container">
+          <section className="ph-section ph-auth-card">
+            <h1 className="ph-title">PortfolioHub</h1>
+            <p className="ph-subtitle">Sign in or create an account to manage your portfolio</p>
+
+            <form className="ph-form" onSubmit={handleSignIn}>
+              <input
+                type="email"
+                placeholder="Email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="ph-input"
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="ph-input"
+              />
+
+              <div className="ph-button-row">
+                <button type="submit" className="ph-btn ph-btn-primary">
+                  Sign In
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSignUp}
+                  className="ph-btn ph-btn-secondary"
+                >
+                  Create Account
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      </main>
+    );
   }
 
   return (
     <main className="ph-page">
       <div className="ph-container">
-        <h1>PortfolioHub</h1>
-        {properties.map((p) => (
-          <div key={p.id} className="ph-property-card" style={{ border: '1px solid #ccc', padding: '1rem', marginBottom: '1rem' }}>
-            <h3>{p.name}</h3>
-            <h4>Documents</h4>
-            {docs.filter(d => d.property_id === p.id).map(d => (
-              <div key={d.id}>
-                <a href={d.file_url} target="_blank">{d.doc_name}</a> (Expires: {d.expiry_date})
-              </div>
-            ))}
-            <input type="text" id={`name-${p.id}`} placeholder="Doc Name" />
-            <input type="date" id={`date-${p.id}`} />
-            <input type="file" onChange={(e) => uploadDoc(p.id, e, (document.getElementById(`name-${p.id}`) as HTMLInputElement).value, (document.getElementById(`date-${p.id}`) as HTMLInputElement).value)} />
+        <header className="ph-header">
+          <div>
+            <h1 className="ph-title">PortfolioHub</h1>
+            <p className="ph-subtitle">Track your property portfolio performance</p>
+            <p className="ph-user-email">Signed in as: {session.user.email}</p>
           </div>
-        ))}
+
+          <button onClick={handleSignOut} className="ph-btn ph-btn-secondary">
+            Sign Out
+          </button>
+        </header>
+
+        <section className="ph-summary-grid">
+          <div className="ph-card">
+            <p className="ph-card-label">Total Properties</p>
+            <h2 className="ph-card-value">{totals.totalProperties}</h2>
+          </div>
+          <div className="ph-card">
+            <p className="ph-card-label">Monthly Rent</p>
+            <h2 className="ph-card-value">{formatCurrency(totals.totalMonthlyRent)}</h2>
+          </div>
+          <div className="ph-card">
+            <p className="ph-card-label">Monthly Expenses</p>
+            <h2 className="ph-card-value">{formatCurrency(totals.totalMonthlyExpenses)}</h2>
+          </div>
+          <div className="ph-card">
+            <p className="ph-card-label">Mortgage Payments</p>
+            <h2 className="ph-card-value">{formatCurrency(totals.totalMortgagePayments)}</h2>
+          </div>
+          <div className="ph-card">
+            <p className="ph-card-label">Monthly Cash Flow</p>
+            <h2 className="ph-card-value">{formatCurrency(totals.totalMonthlyCashFlow)}</h2>
+          </div>
+        </section>
+
+        <section className="ph-section">
+          <h2 className="ph-section-title">
+            {editingId ? "Edit Property" : "Add Property"}
+          </h2>
+
+          <form onSubmit={handleSubmit} className="ph-form">
+            <input
+              type="text"
+              name="name"
+              placeholder="Property name"
+              value={form.name}
+              onChange={handleChange}
+              className="ph-input"
+            />
+            <input
+              type="text"
+              name="address"
+              placeholder="Property address"
+              value={form.address}
+              onChange={handleChange}
+              className="ph-input"
+            />
+            <input
+              type="number"
+              name="monthlyRent"
+              placeholder="Monthly rent"
+              value={form.monthlyRent}
+              onChange={handleChange}
+              className="ph-input"
+            />
+            <input
+              type="number"
+              name="monthlyExpenses"
+              placeholder="Monthly expenses"
+              value={form.monthlyExpenses}
+              onChange={handleChange}
+              className="ph-input"
+            />
+            <input
+              type="number"
+              name="mortgagePayment"
+              placeholder="Monthly mortgage payment"
+              value={form.mortgagePayment}
+              onChange={handleChange}
+              className="ph-input"
+            />
+            <select
+              name="status"
+              value={form.status}
+              onChange={handleChange}
+              className="ph-input"
+            >
+              <option value="Occupied">Occupied</option>
+              <option value="Vacant">Vacant</option>
+              <option value="Under Maintenance">Under Maintenance</option>
+            </select>
+            <textarea
+              name="notes"
+              placeholder="Notes"
+              value={form.notes}
+              onChange={handleChange}
+              className="ph-textarea"
+              rows={4}
+            />
+
+            <div className="ph-button-row">
+              <button type="submit" className="ph-btn ph-btn-primary">
+                {editingId ? "Save Changes" : "Add Property"}
+              </button>
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="ph-btn ph-btn-secondary"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </form>
+        </section>
+
+        <section className="ph-section">
+          <h2 className="ph-section-title">Properties</h2>
+
+          {loading ? (
+            <div className="ph-empty-state">Loading properties...</div>
+          ) : properties.length === 0 ? (
+            <div className="ph-empty-state">No properties added yet.</div>
+          ) : (
+            <div className="ph-property-list">
+              {properties.map((property) => {
+                const cashFlow =
+                  Number(property.monthly_rent) -
+                  Number(property.monthly_expenses) -
+                  Number(property.mortgage_payment || 0);
+
+                return (
+                  <div key={property.id} className="ph-property-card">
+                    <div className="ph-property-info">
+                      <div className="ph-property-top">
+                        <h3 className="ph-property-name">{property.name}</h3>
+                        <span className="ph-status-badge">
+                          {property.status || "Not set"}
+                        </span>
+                      </div>
+
+                      <p className="ph-property-detail">
+                        <strong>Address:</strong> {property.address || "Not provided"}
+                      </p>
+                      <p className="ph-property-detail">
+                        <strong>Rent:</strong>{" "}
+                        {formatCurrency(Number(property.monthly_rent))}
+                      </p>
+                      <p className="ph-property-detail">
+                        <strong>Expenses:</strong>{" "}
+                        {formatCurrency(Number(property.monthly_expenses))}
+                      </p>
+                      <p className="ph-property-detail">
+                        <strong>Mortgage:</strong>{" "}
+                        {formatCurrency(Number(property.mortgage_payment || 0))}
+                      </p>
+                      <p className="ph-property-detail ph-cashflow">
+                        <strong>Cash Flow:</strong> {formatCurrency(cashFlow)}
+                      </p>
+                      <p className="ph-property-detail">
+                        <strong>Notes:</strong> {property.notes || "No notes"}
+                      </p>
+                    </div>
+
+                    <div className="ph-card-actions">
+                      <button
+                        onClick={() => handleEdit(property)}
+                        className="ph-btn ph-btn-secondary"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(property.id)}
+                        className="ph-btn ph-btn-danger"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );
